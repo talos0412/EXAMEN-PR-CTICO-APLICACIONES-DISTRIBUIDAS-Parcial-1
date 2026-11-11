@@ -1,30 +1,34 @@
-# Chat en Tiempo Real — Python · Sockets TCP · Hilos · Docker
+# Chat en Tiempo Real — Python · Sockets TCP · Hilos · Docker <img src="https://cdn.pixabay.com/animation/2023/06/13/15/13/15-13-25-972_512.gif" width="40" style="vertical-align: middle;" alt="chat">
 
 Aplicacion de chat distribuido que permite comunicacion en tiempo real entre un servidor dockerizado y multiples clientes conectados desde terminales locales. No hay turnos, cualquiera puede escribir y recibir en cualquier momento.
 
-## Como funciona
+## Cómo funciona
 
-El servidor corre dentro de un contenedor Docker y se queda esperando conexiones. Cada vez que un cliente se conecta, el servidor le asigna un nombre automaticamente (CLIENTE 1, CLIENTE 2, etc.) y lanza un hilo dedicado para ese cliente, lo que permite que varios esten conectados y escribiendo al mismo tiempo sin que uno bloquee al otro.
+* **Servidor (`server.py`):** Corre dentro de un contenedor Docker escuchando en `0.0.0.0:5555` y permanece en el hilo principal esperando conexiones. Al conectarse un cliente, se le asigna un nombre disponible de la lista de nombres libres (o se crea uno nuevo como `CLIENTE 1`, `CLIENTE 2`, etc.) y se lanza un hilo dedicado para atenderlo, permitiendo que varios usuarios escriban al mismo tiempo.
+  * **Recepción y Broadcast:** En el hilo del cliente se envía un mensaje de bienvenida y se entra en un bucle de recepción. Cada mensaje recibido se valida en tamaño (máximo 500 caracteres) antes de reenviarse mediante `broadcast()` a los demás sockets conectados.
+  * **Control de concurrencia (`clientes_lock`):** Como múltiples hilos interactúan con la lista de clientes al mismo tiempo, se utiliza un `threading.Lock()` para garantizar que solo un hilo la modifique a la vez y evitar condiciones de carrera (*race conditions*).
+  * **Desconexión:** Cuando un cliente se desconecta, `recv()` devuelve vacío, finalizando el bucle. El bloque `finally` se encarga de cerrar el socket, quitarlo de la lista activa y liberar su nombre para que pueda ser reutilizado.
 
-Cada cliente tambien usa dos hilos: uno que se queda esperando que el usuario escriba, y otro que escucha los mensajes que llegan del servidor. Asi se puede recibir un mensaje de cualquier participante en cualquier momento mientras se esta escribiendo.
+* **Cliente (`cliente.py`):** Al conectarse a `127.0.0.1:5555`, lanza un hilo de recepción en paralelo al hilo principal. Mientras el hilo principal se bloquea esperando que el usuario escriba con `input()`, el hilo de recepción escucha los mensajes del servidor en todo momento.
+  * **Sincronización de nombre:** El hilo de recepción detecta el nombre asignado en el mensaje de bienvenida y dispara un evento (`threading.Event`) que el hilo principal espera antes de habilitar la escritura, asegurando que siempre quede registro de quién envía cada mensaje.
 
-Los mensajes llevan timestamp con hora local de Ecuador, se validan antes de distribuirse (maximo 500 caracteres), y el servidor notifica cuando alguien entra o sale del chat.
+Los mensajes llevan timestamp con hora local de Ecuador (`America/Guayaquil`) y el servidor notifica globalmente cuando alguien entra o sale del chat.
 
-## Tecnologias
+## Tecnologías
 
 | Componente | Detalle |
 |---|---|
-| Protocolo | TCP (`socket.SOCK_STREAM`) |
-| Concurrencia | `threading` — un hilo por cliente + hilo de escritura del servidor |
+| Protocolo | TCP (`socket.SOCK_STREAM`) en puerto `5555` |
+| Concurrencia | `threading` (`Lock` en servidor para exclusión mutua, `Event` en cliente para sincronización) |
 | Contenedor | Docker + Docker Compose |
 | Zona horaria | `America/Guayaquil` (UTC-5) |
 
 ## Requisitos
 
 - Docker y Docker Compose instalados
-- Python 3.x instalado en la maquina local
+- Python 3.x instalado en la máquina local
 
-## Ejecucion
+## Ejecución
 
 ### Terminal 1 — Levantar el servidor
 
