@@ -1,0 +1,10 @@
+services:
+  servidor-chat:
+    build: .
+    container_name: servidor_chat_tcp
+    ports:
+      - "5555:5555"
+    stdin_open: true
+    tty: true
+    environment:
+      - TZ=America/Guayaquil
